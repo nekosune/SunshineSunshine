@@ -36,6 +36,10 @@ import com.example.android.sunshine.app.R;
 import com.example.android.sunshine.app.Utility;
 import com.example.android.sunshine.app.data.WeatherContract;
 import com.example.android.sunshine.app.muzei.WeatherMuzeiSource;
+import com.google.android.gms.common.api.GoogleApiClient;
+import com.google.android.gms.wearable.PutDataMapRequest;
+import com.google.android.gms.wearable.PutDataRequest;
+import com.google.android.gms.wearable.Wearable;
 
 import org.json.JSONArray;
 import org.json.JSONException;
@@ -51,6 +55,7 @@ import java.net.HttpURLConnection;
 import java.net.URL;
 import java.util.Vector;
 import java.util.concurrent.ExecutionException;
+import java.util.concurrent.TimeUnit;
 
 public class SunshineSyncAdapter extends AbstractThreadedSyncAdapter {
     public final String LOG_TAG = SunshineSyncAdapter.class.getSimpleName();
@@ -63,6 +68,10 @@ public class SunshineSyncAdapter extends AbstractThreadedSyncAdapter {
     private static final long DAY_IN_MILLIS = 1000 * 60 * 60 * 24;
     private static final int WEATHER_NOTIFICATION_ID = 3004;
 
+    private static final String WEAR_DATA_PATH="/sunshine";
+    private static final String WEAR_DATA_HIGH="high";
+    private static final String WEAR_DATA_LOW="low";
+    private static final String WEAR_DATA_TYPE="type";
 
     private static final String[] NOTIFY_WEATHER_PROJECTION = new String[] {
             WeatherContract.WeatherEntry.COLUMN_WEATHER_ID,
@@ -87,8 +96,11 @@ public class SunshineSyncAdapter extends AbstractThreadedSyncAdapter {
     public static final int LOCATION_STATUS_UNKNOWN = 3;
     public static final int LOCATION_STATUS_INVALID = 4;
 
+    private GoogleApiClient mApiClient;
+
     public SunshineSyncAdapter(Context context, boolean autoInitialize) {
         super(context, autoInitialize);
+        mApiClient=new GoogleApiClient.Builder(context).addApi(Wearable.API).build();
     }
 
     @Override
@@ -368,6 +380,7 @@ public class SunshineSyncAdapter extends AbstractThreadedSyncAdapter {
 
                 updateWidgets();
                 updateMuzei();
+                updateWear();
                 notifyWeather();
             }
             Log.d(LOG_TAG, "Sync Complete. " + cVVector.size() + " Inserted");
@@ -379,6 +392,8 @@ public class SunshineSyncAdapter extends AbstractThreadedSyncAdapter {
             setLocationStatus(getContext(), LOCATION_STATUS_SERVER_INVALID);
         }
     }
+
+
 
     private void updateWidgets() {
         Context context = getContext();
@@ -397,6 +412,45 @@ public class SunshineSyncAdapter extends AbstractThreadedSyncAdapter {
                     .setClass(context, WeatherMuzeiSource.class));
         }
     }
+
+    private void updateWear() {
+        Context context = getContext();
+        SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(context);
+        String displayNotificationsKey = context.getString(R.string.pref_enable_notifications_key);
+        boolean displayNotifications = prefs.getBoolean(displayNotificationsKey,
+                Boolean.parseBoolean(context.getString(R.string.pref_enable_notifications_default)));
+        if ( displayNotifications ) {
+            String lastNotificationKey = context.getString(R.string.pref_last_notification);
+            long lastSync = prefs.getLong(lastNotificationKey, 0);
+
+            if (System.currentTimeMillis() - lastSync >= DAY_IN_MILLIS) {
+                // Last sync was more than 1 day ago, let's send a notification with the weather.
+                String locationQuery = Utility.getPreferredLocation(context);
+
+                Uri weatherUri = WeatherContract.WeatherEntry.buildWeatherLocationWithDate(locationQuery, System.currentTimeMillis());
+
+                // we'll query our contentProvider, as always
+                Cursor cursor = context.getContentResolver().query(weatherUri, NOTIFY_WEATHER_PROJECTION, null, null, null);
+
+                if (cursor.moveToFirst()) {
+                    int weatherId = cursor.getInt(INDEX_WEATHER_ID);
+                    double high = cursor.getDouble(INDEX_MAX_TEMP);
+                    double low = cursor.getDouble(INDEX_MIN_TEMP);
+                    PutDataMapRequest putDataMapRequest=PutDataMapRequest.create(WEAR_DATA_PATH);
+                    putDataMapRequest.getDataMap().putInt(WEAR_DATA_TYPE,weatherId);
+                    putDataMapRequest.getDataMap().putDouble(WEAR_DATA_HIGH,high);
+                    putDataMapRequest.getDataMap().putDouble(WEAR_DATA_LOW,low);
+                    PutDataRequest putRequest=putDataMapRequest.asPutDataRequest();
+                    mApiClient.blockingConnect(5, TimeUnit.SECONDS);
+                    if (!mApiClient.isConnected()) {
+                        return;
+                    }
+                    Wearable.DataApi.putDataItem(mApiClient,putRequest);
+                }
+            }
+        }
+    }
+
 
     private void notifyWeather() {
         Context context = getContext();

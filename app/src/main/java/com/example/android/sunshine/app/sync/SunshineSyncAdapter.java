@@ -31,6 +31,7 @@ import android.util.Log;
 
 import com.bumptech.glide.Glide;
 import com.example.android.sunshine.app.BuildConfig;
+import com.example.android.sunshine.app.ListenForWatch;
 import com.example.android.sunshine.app.MainActivity;
 import com.example.android.sunshine.app.R;
 import com.example.android.sunshine.app.Utility;
@@ -68,12 +69,9 @@ public class SunshineSyncAdapter extends AbstractThreadedSyncAdapter {
     private static final long DAY_IN_MILLIS = 1000 * 60 * 60 * 24;
     private static final int WEATHER_NOTIFICATION_ID = 3004;
 
-    private static final String WEAR_DATA_PATH="/sunshine";
-    private static final String WEAR_DATA_HIGH="high";
-    private static final String WEAR_DATA_LOW="low";
-    private static final String WEAR_DATA_TYPE="type";
 
-    private static final String[] NOTIFY_WEATHER_PROJECTION = new String[] {
+
+    public static final String[] NOTIFY_WEATHER_PROJECTION = new String[] {
             WeatherContract.WeatherEntry.COLUMN_WEATHER_ID,
             WeatherContract.WeatherEntry.COLUMN_MAX_TEMP,
             WeatherContract.WeatherEntry.COLUMN_MIN_TEMP,
@@ -81,10 +79,10 @@ public class SunshineSyncAdapter extends AbstractThreadedSyncAdapter {
     };
 
     // these indices must match the projection
-    private static final int INDEX_WEATHER_ID = 0;
-    private static final int INDEX_MAX_TEMP = 1;
-    private static final int INDEX_MIN_TEMP = 2;
-    private static final int INDEX_SHORT_DESC = 3;
+    public static final int INDEX_WEATHER_ID = 0;
+    public static final int INDEX_MAX_TEMP = 1;
+    public static final int INDEX_MIN_TEMP = 2;
+    public static final int INDEX_SHORT_DESC = 3;
 
     @Retention(RetentionPolicy.SOURCE)
     @IntDef({LOCATION_STATUS_OK, LOCATION_STATUS_SERVER_DOWN, LOCATION_STATUS_SERVER_INVALID,  LOCATION_STATUS_UNKNOWN, LOCATION_STATUS_INVALID})
@@ -380,7 +378,7 @@ public class SunshineSyncAdapter extends AbstractThreadedSyncAdapter {
 
                 updateWidgets();
                 updateMuzei();
-                updateWear();
+                ListenForWatch.updateWear(mApiClient,getContext());
                 notifyWeather();
             }
             Log.d(LOG_TAG, "Sync Complete. " + cVVector.size() + " Inserted");
@@ -413,43 +411,7 @@ public class SunshineSyncAdapter extends AbstractThreadedSyncAdapter {
         }
     }
 
-    private void updateWear() {
-        Context context = getContext();
-        SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(context);
-        String displayNotificationsKey = context.getString(R.string.pref_enable_notifications_key);
-        boolean displayNotifications = prefs.getBoolean(displayNotificationsKey,
-                Boolean.parseBoolean(context.getString(R.string.pref_enable_notifications_default)));
-        if ( displayNotifications ) {
-            String lastNotificationKey = context.getString(R.string.pref_last_notification);
-            long lastSync = prefs.getLong(lastNotificationKey, 0);
 
-            if (System.currentTimeMillis() - lastSync >= DAY_IN_MILLIS) {
-                // Last sync was more than 1 day ago, let's send a notification with the weather.
-                String locationQuery = Utility.getPreferredLocation(context);
-
-                Uri weatherUri = WeatherContract.WeatherEntry.buildWeatherLocationWithDate(locationQuery, System.currentTimeMillis());
-
-                // we'll query our contentProvider, as always
-                Cursor cursor = context.getContentResolver().query(weatherUri, NOTIFY_WEATHER_PROJECTION, null, null, null);
-
-                if (cursor.moveToFirst()) {
-                    int weatherId = cursor.getInt(INDEX_WEATHER_ID);
-                    double high = cursor.getDouble(INDEX_MAX_TEMP);
-                    double low = cursor.getDouble(INDEX_MIN_TEMP);
-                    PutDataMapRequest putDataMapRequest=PutDataMapRequest.create(WEAR_DATA_PATH);
-                    putDataMapRequest.getDataMap().putInt(WEAR_DATA_TYPE,weatherId);
-                    putDataMapRequest.getDataMap().putDouble(WEAR_DATA_HIGH,high);
-                    putDataMapRequest.getDataMap().putDouble(WEAR_DATA_LOW,low);
-                    PutDataRequest putRequest=putDataMapRequest.asPutDataRequest();
-                    mApiClient.blockingConnect(5, TimeUnit.SECONDS);
-                    if (!mApiClient.isConnected()) {
-                        return;
-                    }
-                    Wearable.DataApi.putDataItem(mApiClient,putRequest);
-                }
-            }
-        }
-    }
 
 
     private void notifyWeather() {

@@ -21,6 +21,7 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.res.Resources;
+import android.graphics.BitmapFactory;
 import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.Paint;
@@ -108,7 +109,7 @@ public class WeatherDigitalFace extends CanvasWatchFaceService {
 
         boolean mAmbient;
         Time mTime;
-        String mWeather="Sunny";
+        int mWeather=800;
         String mHigh="15C";
         String mLow="12C";
 
@@ -223,8 +224,7 @@ public class WeatherDigitalFace extends CanvasWatchFaceService {
             mTextPaint.getTextBounds("y",0,1,bounds);
             mYWeatherOffset=mYOffset+bounds.height()+5;
             mWeatherPaint.setTextSize(weatherTextSize);
-            Rect weatherBounds = new Rect();
-            mWeatherPaint.getTextBounds("y",0,1,weatherBounds);
+            Rect weatherBounds = getApplicationContext().getDrawable(R.drawable.art_clear).getBounds();
             mYTempOffset=mYWeatherOffset+weatherBounds.height()+10;
 
         }
@@ -273,7 +273,7 @@ public class WeatherDigitalFace extends CanvasWatchFaceService {
                     ? String.format("%d:%02d", mTime.hour, mTime.minute)
                     : String.format("%d:%02d:%02d", mTime.hour, mTime.minute, mTime.second);
             canvas.drawText(text, mXOffset, mYOffset, mTextPaint);
-            canvas.drawText(mWeather,mXOffset,mYWeatherOffset,mWeatherPaint);
+            canvas.drawBitmap(BitmapFactory.decodeResource(getApplicationContext().getResources(),WeatherFaceUtil.getArtResourceForWeatherCondition(mWeather)),mXOffset,mYWeatherOffset,mWeatherPaint);
             if (getPeekCardPosition().isEmpty()) {
                 canvas.drawText(String.format("%s/%s", mHigh, mLow), mXOffset, mYTempOffset, mWeatherPaint);
             }
@@ -414,7 +414,7 @@ public class WeatherDigitalFace extends CanvasWatchFaceService {
             DataMap config=dataMapItem.getDataMap();
             mHigh=config.getString(WeatherFaceUtil.WEAR_DATA_HIGH);
             mLow=config.getString(WeatherFaceUtil.WEAR_DATA_LOW);
-            mWeather=WeatherFaceUtil.getStringForWeatherCondition(getApplicationContext(),config.getInt(WeatherFaceUtil.WEAR_DATA_TYPE));
+            mWeather=config.getInt(WeatherFaceUtil.WEAR_DATA_TYPE);
             invalidate();
         }
 
